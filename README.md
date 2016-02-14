@@ -3,6 +3,6 @@ Coursera's Practical Machine Learning Project: Quantified Self Movement Predicti
 
 by Ferran Briansó, on February 14th 2016.
 
-Please find the Rmarkdown file here: [https://github.com/ferran-brianso/Coursera_PML_Project/blob/master/PredictionReport.Rmd](PredictionReport.Rmd)
+Please find the Rmarkdown file here: (https://github.com/ferran-brianso/Coursera_PML_Project/blob/master/PredictionReport.Rmd)[PredictionReport.Rmd]
 
 and the resulting HTML page here: 
