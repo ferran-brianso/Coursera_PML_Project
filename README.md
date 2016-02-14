@@ -5,7 +5,7 @@
 
 Please find the Rmarkdown file here:
 
-https://github.com/ferran-brianso/Coursera_PML_Project/blob/master/PredictionReport.Rmd
+http://github.com/ferran-brianso/Coursera_PML_Project/blob/master/PredictionReport.Rmd
 
 and the resulting HTML page here: 
-
+http://ferran-brianso.github.io/Coursera_PML_Project/PredictionReport.html
