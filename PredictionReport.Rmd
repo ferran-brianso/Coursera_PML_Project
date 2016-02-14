@@ -1,0 +1,141 @@
+---
+title: Coursera's Practical Machine Learning Project - Quantified Self Movement Prediction Report
+author: Ferran Briansó
+date: February 14th 2016
+output: html_document
+---
+
+## Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, our goal is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict the manner in which they did some barbell lifts (correctly or incorrectly, as recorded in the "classe" field of the training set). 
+
+More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+## Load R packages
+```{r loadLibs}
+library(caret)
+library(corrplot)
+library(randomForest)
+library(rattle)
+library(rpart)
+library(rpart.plot)
+```
+
+## Data pre-processing
+
+### Download files from the web
+Get data files downlading them from the web
+```{r getFiles, cache = T}
+train.url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+test.url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+train.fname <- "./data/pml-training.csv"
+test.fname  <- "./data/pml-testing.csv"
+if (!file.exists("./data")) {
+  dir.create("./data")
+}
+if (!file.exists(train.fname)) {
+  download.file(train.url, destfile=train.fname, method="curl")
+}
+if (!file.exists(test.fname)) {
+  download.file(test.url, destfile=test.fname, method="curl")
+}
+```
+
+### Load raw data
+After downloading the csv files from the web, data can be loaded into the corresponding data frames. 
+```{r loadData, cache = T}
+train.raw <- read.csv(train.fname)
+test.raw <- read.csv(test.fname)
+colnames(train.raw)
+```
+
+The training data set has `r dim(train.raw)[1]` observations and `r dim(train.raw)[2]` variables, while the testing data set contains `r dim(test.raw)[1]` cases and the same `r dim(test.raw)[2]` variables. The "classe" variable in the training set is the outcome that we pretend to predict with this analysis. 
+
+### Data cleaning
+Here we clean the data removing those observations with missing (NA) values, as well as some variables not expected to be useful for the prediction.
+```{r cleanData, cache = T}
+train.raw <- train.raw[ , colSums(is.na(train.raw)) == 0] 
+test.raw <- test.raw[ , colSums(is.na(test.raw)) == 0] 
+outcome <- train.raw$classe
+train.cols2rm <- grepl("^X|timestamp|window", names(train.raw))
+train.raw <- train.raw[ , !train.cols2rm]
+train.tidy <- train.raw[ , sapply(train.raw, is.numeric)]
+train.tidy$classe <- outcome
+test.cols2rm <- grepl("^X|timestamp|window", names(test.raw))
+test.raw <- test.raw[ , !test.cols2rm]
+test.tidy <- test.raw[ , sapply(test.raw, is.numeric)]
+```
+
+After that, the tidy training data set contains `r dim(train.tidy)[1]` records and `r dim(train.tidy)[2]` variables, while the tidy testing data set contains `r dim(test.tidy)[1]` observations and `r dim(train.tidy)[2]` variables.
+
+### Data splitting
+The tidy training set can be separated into a real training set (66%, as the usual 2/3) and a internal validation data set (34%), that will be used afterwards for cross-validation. 
+```{r splitData, cache = T}
+set.seed(1977) # to allow reproducibility
+in.train <- createDataPartition(train.tidy$classe, p = 0.66, list = FALSE)
+train.data <- train.tidy[in.train, ]
+test.data <- train.tidy[-in.train, ]
+```
+
+## Data Modeling
+A predictive model for good or bad activity recognition is fitted here using **Random Forest** algorithm. We applied this method because it is quite robust to correlation effects between variables and outlier presence. It can be affected somehow by the seed stablished for the algorithm, but performs automatic selection of the most relevant variables, and its putative overfitting has been controled by applying a **5-fold cross validation**. 
+```{r createRFmodel, cache = T}
+cv.control <- trainControl(method="cv", 5)
+rf.model <- train(classe ~ ., data = train.data, method = "rf", 
+                  trControl = cv.control, ntree = 250)
+rf.model
+```
+
+So, the performance of the model on the validation data set (that third coming from training set) can be measured as follows 
+```{r evalModel, cache = T}
+rf.predict <- predict(rf.model, test.data)
+conf.matrix <- confusionMatrix(test.data$classe, rf.predict)
+conf.matrix
+```
+
+```{r getResults, cache = T}
+res.accur <- postResample(rf.predict, test.data$classe)
+res.accur
+res.oose <- 1 - as.numeric(conf.matrix$overall[1])
+res.oose
+```
+So, the estimated accuracy of the model is `r round(res.accur[1], 4)`% and the estimated out-of-sample error is `r 100*round(res.oose[1], 4)`%.
+
+## Predicting for Test Data Set
+Now, we apply the model to the original testing data set downloaded from the data source. We remove the `problem_id` column first.  
+```{r predictNew, cache = T}
+prediction <- predict(rf.model, test.tidy[, -length(names(test.tidy))])
+prediction
+```
+
+## Additional Figures
+Figure 1. Correlation Matrix Plot
+```{r plotCorr, cache = T}
+corrPlot <- cor(train.data[ , -length(names(train.data))])
+corrplot(corrPlot, method="color", tl.cex = .5, tl.col = "black", 
+         col=colorRampPalette(c("magenta", "white", "darkgreen"))(128))
+```
+
+Figure 2. Decision Tree Diagram
+```{r plotTree, cache = T}
+treeModel <- rpart(classe ~ ., data=train.data, method="class")
+pdf(file="treePlot.pdf") # fancy plot saved as pdf
+  fancyRpartPlot(treeModel, sub="Classification Tree with rattle package")
+dev.off()
+prp(treeModel) # simple plot that fits in the html file
+```
+
+Figure 3. Prediction Performance
+```{r plotPred, cache = T}
+plot(conf.matrix$byClass[ ,1], col = "red", ylim = c(0.95, 1), ylab = "Value", xlab = "Class")
+lines(conf.matrix$byClass[ ,1], col = "red")
+points(conf.matrix$byClass[ ,2], col = "blue")
+lines(conf.matrix$byClass[ ,2], col = "blue")
+points(conf.matrix$byClass[ ,3], col = "green")
+lines(conf.matrix$byClass[ ,3], col = "green")
+points(conf.matrix$byClass[ ,4], col = "brown")
+lines(conf.matrix$byClass[ ,4], col = "brown")
+legend(3.5, 0.97, c("Sensitivity","Specificity","Pos.Pred.Value","Neg.Pred.Value"), 
+       cex = .75, pch = "oooo", col = c("red", "blue", "green", "brown"))
+```
